@@ -1,3 +1,5 @@
+use crate::schema::payload::schema::ContextId;
+
 #[derive(Debug)]
 pub struct ContextCounter {
     pub is_server: bool,
@@ -12,7 +14,7 @@ impl ContextCounter {
         }
     }
 
-    pub fn next_context_id(&mut self) -> u64 {
+    pub fn next_context_id(&mut self) -> ContextId {
         if u64::MAX - self.counter <= 2 {
             self.counter = if self.is_server { 1 } else { 2 };
             self.counter

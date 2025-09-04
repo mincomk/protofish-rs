@@ -1,24 +1,18 @@
 use std::sync::Arc;
 
-use dashmap::DashMap;
-use parking_lot::Mutex;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::mpsc::Receiver;
 
 use crate::{
-    constant::CHANNEL_BUFFER,
-    core::common::{counter::ContextCounter, error::StreamError, stream::Stream},
+    core::common::error::StreamError,
     internal::pmc_frame::send_frame,
-    prost_generated::{common, payload},
-    schema::payload::schema::{Message, Payload, StreamId},
-    utp::{error::UTPError, protocol::UTP},
+    schema::payload::schema::{ContextId, Message, Payload, StreamId},
+    utp::protocol::UTP,
 };
 
-pub type ContextId = u64;
-
 pub struct ContextWriter<U: UTP> {
-    context_id: ContextId,
-    stream_id: StreamId,
-    utp: Arc<U>,
+    pub(crate) context_id: ContextId,
+    pub(crate) stream_id: StreamId,
+    pub(crate) utp: Arc<U>,
 }
 
 impl<U: UTP> ContextWriter<U> {
@@ -37,7 +31,7 @@ impl<U: UTP> ContextWriter<U> {
 }
 
 pub struct ContextReader {
-    receiver: tokio::sync::Mutex<Receiver<Payload>>,
+    pub(crate) receiver: tokio::sync::Mutex<Receiver<Payload>>,
 }
 
 impl ContextReader {

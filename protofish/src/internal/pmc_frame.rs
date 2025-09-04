@@ -22,8 +22,7 @@ pub struct PMCFrame<U: UTP> {
 }
 
 impl<U: UTP> PMCFrame<U> {
-    pub fn new(utp: U, stream_id: StreamId) -> Self {
-        let utp = Arc::new(utp);
+    pub fn new(utp: Arc<U>, stream_id: StreamId) -> Self {
         let senders: Arc<DashMap<ContextId, Sender<Payload>>> = Default::default();
 
         let _task = {
