@@ -1,8 +1,11 @@
 use crate::schema::common::schema::{IntegrityType, ServerHelloInfo, Version};
 
+pub type ContextId = u64;
+pub type StreamId = u64;
+
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub context_id: u64,
+    pub context_id: ContextId,
     pub payload: Payload,
 }
 
@@ -42,13 +45,13 @@ pub struct Error {
 
 #[derive(Debug, Clone)]
 pub struct StreamOpen {
-    pub stream_id: u64,
+    pub stream_id: StreamId,
     pub meta: crate::schema::common::schema::StreamCreateMeta,
 }
 
 #[derive(Debug, Clone)]
 pub struct StreamClose {
-    pub stream_id: u64,
+    pub stream_id: StreamId,
 }
 
 #[derive(Debug, Clone)]
@@ -61,3 +64,4 @@ pub struct BenchmarkStart {
     pub integrity_type: IntegrityType,
     pub byte_count: u64,
 }
+
