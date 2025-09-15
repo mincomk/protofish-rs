@@ -1,8 +1,13 @@
-use crate::schema::common::schema::{IntegrityType, ServerHelloInfo, Version};
+use bytes::Bytes;
+
+use crate::schema::common::schema::{IntegrityType, Version};
+
+pub type ContextId = u64;
+pub type StreamId = u64;
 
 #[derive(Debug, Clone)]
 pub struct Message {
-    pub context_id: u64,
+    pub context_id: ContextId,
     pub payload: Payload,
 }
 
@@ -31,7 +36,8 @@ pub struct ClientHello {
 pub struct ServerHello {
     pub version: Version,
     pub ok: bool,
-    pub info: Option<ServerHelloInfo>,
+    pub connection_token: Option<Bytes>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,13 +48,13 @@ pub struct Error {
 
 #[derive(Debug, Clone)]
 pub struct StreamOpen {
-    pub stream_id: u64,
+    pub stream_id: StreamId,
     pub meta: crate::schema::common::schema::StreamCreateMeta,
 }
 
 #[derive(Debug, Clone)]
 pub struct StreamClose {
-    pub stream_id: u64,
+    pub stream_id: StreamId,
 }
 
 #[derive(Debug, Clone)]
