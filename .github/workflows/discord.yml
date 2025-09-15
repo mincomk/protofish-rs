@@ -2,9 +2,7 @@ name: Notify to Discord
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   notify:
