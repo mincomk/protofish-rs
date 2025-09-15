@@ -1,8 +1,6 @@
 use crate::{
-    prost_generated::common::v1 as common_v1,
-    prost_generated::payload::v1 as payload_v1,
-    schema::common::schema as common_schema,
-    schema::payload::schema as payload_schema,
+    prost_generated::common::v1 as common_v1, prost_generated::payload::v1 as payload_v1,
+    schema::common::schema as common_schema, schema::payload::schema as payload_schema,
 };
 
 impl From<payload_v1::Message> for payload_schema::Message {
@@ -116,7 +114,8 @@ impl From<payload_v1::ServerHello> for payload_schema::ServerHello {
         payload_schema::ServerHello {
             version: value.version.unwrap().into(),
             ok: value.ok,
-            info: value.info.map(|v| v.into()),
+            connection_token: value.connection_token.map(Into::into),
+            message: value.message,
         }
     }
 }
@@ -126,7 +125,8 @@ impl From<payload_schema::ServerHello> for payload_v1::ServerHello {
         payload_v1::ServerHello {
             version: Some(value.version.into()),
             ok: value.ok,
-            info: value.info.map(|v| v.into()),
+            connection_token: value.connection_token.map(Into::into),
+            message: value.message,
         }
     }
 }
@@ -217,24 +217,6 @@ impl From<payload_schema::BenchmarkStart> for payload_v1::BenchmarkStart {
         payload_v1::BenchmarkStart {
             integrity_type: value.integrity_type.into(),
             byte_count: value.byte_count,
-        }
-    }
-}
-
-impl From<common_v1::ServerHelloInfo> for common_schema::ServerHelloInfo {
-    fn from(value: common_v1::ServerHelloInfo) -> Self {
-        common_schema::ServerHelloInfo {
-            connection_token: value.connection_token,
-            is_resume: value.is_resume,
-        }
-    }
-}
-
-impl From<common_schema::ServerHelloInfo> for common_v1::ServerHelloInfo {
-    fn from(value: common_schema::ServerHelloInfo) -> Self {
-        common_v1::ServerHelloInfo {
-            connection_token: value.connection_token,
-            is_resume: value.is_resume,
         }
     }
 }
@@ -351,15 +333,13 @@ mod tests {
                 patch: 0,
             }),
             ok: true,
-            info: Some(common_v1::ServerHelloInfo {
-                connection_token: vec![4, 5, 6],
-                is_resume: true,
-            }),
+            connection_token: Some(vec![4, 5, 6]),
+            message: Some("hi".into()),
         };
         let schema_server_hello: payload_schema::ServerHello = proto_server_hello.clone().into();
         assert_eq!(schema_server_hello.version.major, 1);
         assert!(schema_server_hello.ok);
-        assert!(schema_server_hello.info.is_some());
+        assert!(schema_server_hello.connection_token.is_some());
 
         let converted_proto: payload_v1::ServerHello = schema_server_hello.into();
         assert_eq!(converted_proto, proto_server_hello);
@@ -410,7 +390,9 @@ mod tests {
 
     #[test]
     fn test_arbitary_data_conversion() {
-        let proto_arbitary_data = payload_v1::ArbitaryData { content: vec![1, 2, 3, 4] };
+        let proto_arbitary_data = payload_v1::ArbitaryData {
+            content: vec![1, 2, 3, 4],
+        };
         let schema_arbitary_data: payload_schema::ArbitaryData = proto_arbitary_data.clone().into();
         assert_eq!(schema_arbitary_data.content, vec![1, 2, 3, 4]);
 
@@ -424,7 +406,8 @@ mod tests {
             integrity_type: common_v1::IntegrityType::Unreliable.into(),
             byte_count: 1024,
         };
-        let schema_benchmark_start: payload_schema::BenchmarkStart = proto_benchmark_start.clone().into();
+        let schema_benchmark_start: payload_schema::BenchmarkStart =
+            proto_benchmark_start.clone().into();
         assert!(matches!(
             schema_benchmark_start.integrity_type,
             IntegrityType::Unreliable
@@ -435,3 +418,4 @@ mod tests {
         assert_eq!(converted_proto, proto_benchmark_start);
     }
 }
+

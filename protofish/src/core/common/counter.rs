@@ -24,3 +24,24 @@ impl ContextCounter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::core::common::counter::ContextCounter;
+
+    #[test]
+    fn test_context_counter_server() {
+        let mut c = ContextCounter::new(true);
+
+        assert_eq!(c.next_context_id(), 1);
+        assert_eq!(c.next_context_id(), 3);
+    }
+
+    #[test]
+    fn test_context_counter_client() {
+        let mut c = ContextCounter::new(false);
+
+        assert_eq!(c.next_context_id(), 0);
+        assert_eq!(c.next_context_id(), 2);
+    }
+}

@@ -6,12 +6,6 @@ pub struct Version {
 }
 
 #[derive(Debug, Clone)]
-pub struct ServerHelloInfo {
-    pub connection_token: Vec<u8>,
-    pub is_resume: bool,
-}
-
-#[derive(Debug, Clone)]
 pub struct StreamCreateMeta {
     pub integrity_type: IntegrityType,
 }

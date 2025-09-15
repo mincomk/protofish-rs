@@ -1,4 +1,6 @@
-use crate::schema::common::schema::{IntegrityType, ServerHelloInfo, Version};
+use bytes::Bytes;
+
+use crate::schema::common::schema::{IntegrityType, Version};
 
 pub type ContextId = u64;
 pub type StreamId = u64;
@@ -34,7 +36,8 @@ pub struct ClientHello {
 pub struct ServerHello {
     pub version: Version,
     pub ok: bool,
-    pub info: Option<ServerHelloInfo>,
+    pub connection_token: Option<Bytes>,
+    pub message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -64,4 +67,3 @@ pub struct BenchmarkStart {
     pub integrity_type: IntegrityType,
     pub byte_count: u64,
 }
-

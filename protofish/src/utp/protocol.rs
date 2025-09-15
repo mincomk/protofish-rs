@@ -1,22 +1,29 @@
+use async_trait::async_trait;
+use bytes::{Bytes, BytesMut};
+
 use crate::{
     schema::{common::schema::IntegrityType, payload::schema::StreamId},
     utp::error::UTPError,
 };
 
-pub trait UTP: Send + Sync + 'static {
-    async fn open_stream(&self, integrity: IntegrityType) -> Result<StreamId, UTPError>;
-    async fn close_stream(&self, stream_id: StreamId) -> Result<(), UTPError>;
+#[async_trait]
+pub trait UTPStream: Send + Sync + 'static {
+    fn id(&self) -> StreamId;
+    async fn send(&self, data: &Bytes) -> Result<(), UTPError>;
+    async fn receive(&self, data: &mut BytesMut) -> Result<usize, UTPError>;
+    async fn close(&self) -> Result<(), UTPError>;
+}
 
-    fn send(
-        &self,
-        stream_id: StreamId,
-        data: &[u8],
-    ) -> impl Future<Output = Result<(), UTPError>> + Send;
-    fn receive(
-        &self,
-        stream_id: StreamId,
-        data: &mut [u8],
-    ) -> impl Future<Output = Result<(), UTPError>> + Send;
+#[async_trait]
+pub trait UTP<S: UTPStream>: Send + Sync + 'static {
+    async fn connect(&self) -> Result<(), UTPError>;
+    async fn next_event(&self) -> UTPEvent;
 
-    async fn wait_stream_open(&self, stream_id: StreamId) -> Result<(), UTPError>;
+    async fn open_stream(&self, integrity: IntegrityType) -> Result<S, UTPError>;
+    async fn wait_stream(&self, id: StreamId) -> Result<S, UTPError>;
+}
+
+pub enum UTPEvent {
+    UnexpectedClose,
+    NewStream(StreamId),
 }

@@ -1,25 +1,25 @@
-use std::sync::Arc;
-
-use tokio::sync::mpsc;
+use std::{marker::PhantomData, sync::Arc};
 
 use crate::{
-    constant::CHANNEL_BUFFER,
-    core::common::context::{ContextReader, ContextWriter},
-    utp::protocol::UTP,
+    core::common::pmc::PMC,
+    utp::protocol::{UTP, UTPStream},
 };
 
-pub struct Connection<U>
+pub struct Connection<S, U>
 where
-    U: UTP,
+    S: UTPStream,
+    U: UTP<S>,
 {
     utp: Arc<U>,
+    pub pmc: PMC<S>,
 }
 
-impl<U> Connection<U>
+impl<S, U> Connection<S, U>
 where
-    U: UTP,
+    S: UTPStream,
+    U: UTP<S>,
 {
-    pub fn new(utp: U) -> Self {
-        Self { utp: Arc::new(utp) }
+    pub fn new(utp: Arc<U>, pmc: PMC<S>) -> Self {
+        Self { utp, pmc }
     }
 }

@@ -2,6 +2,9 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum UTPError {
-    #[error("unknown error {0}")]
-    Unknown(String),
+    #[error("UTP unknown warn {0}")]
+    Warn(String),
+
+    #[error("UTP unknown fatal {0}")]
+    Fatal(String),
 }
