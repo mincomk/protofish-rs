@@ -57,9 +57,9 @@ where
             let upstream = self.upstream.clone();
 
             let fut = { async move { upstream.receive(capacity).await } };
-            let fut = Box::pin(fut);
+            
 
-            fut
+            Box::pin(fut)
         };
 
         match pending_fut.as_mut().poll(cx) {

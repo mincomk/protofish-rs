@@ -1,6 +1,5 @@
 use std::{pin::Pin, sync::Arc};
 
-use bytes::Bytes;
 
 use crate::{
     schema::{common::schema::IntegrityType, payload::schema::StreamId},

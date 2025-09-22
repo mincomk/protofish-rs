@@ -24,7 +24,7 @@ impl<S: UTPStream> ContextWriter<S> {
             },
         )
         .await
-        .map_err(|e| ConnectionError::UTP(e))
+        .map_err(ConnectionError::UTP)
     }
 }
 
