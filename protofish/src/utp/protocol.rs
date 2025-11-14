@@ -12,7 +12,7 @@ use crate::{
 /// Streams can be either reliable (lossless) or unreliable (lossy) based on
 /// the `IntegrityType` used when opening the stream.
 #[async_trait]
-pub trait UTPStream: Send + Sync + 'static {
+pub trait UTPStream: Send + Sync + Unpin + 'static {
     /// Returns the unique identifier for this stream.
     fn id(&self) -> StreamId;
 
