@@ -4,14 +4,14 @@ use bytes::Bytes;
 use thiserror::Error;
 
 use crate::{
-    IntegrityType,
+    IntegrityType, StreamCreateMeta, StreamOpen,
     core::common::{
         context::{Context, ContextReader, ContextWriter},
         error::ConnectionError,
         stream::ProtofishStream,
     },
     schema::{ArbitaryData, Payload},
-    utp::{UTP, error::UTPError},
+    utp::{UTP, UTPStream, error::UTPError},
 };
 
 /// An arbitrary data context consisting of a writer and reader pair.
@@ -97,7 +97,15 @@ impl<U: UTP> ArbContext<U> {
         &self,
         integrity: IntegrityType,
     ) -> Result<ProtofishStream<U::Stream>, ArbError> {
-        let stream = self.utp.new_stream(integrity).await?;
+        let stream = self.utp.new_stream(integrity.clone()).await?;
+        self.writer
+            .write(Payload::StreamOpen(StreamOpen {
+                stream_id: stream.id(),
+                meta: StreamCreateMeta {
+                    integrity_type: integrity,
+                },
+            }))
+            .await?;
         Ok(ProtofishStream::new(stream))
     }
 }
