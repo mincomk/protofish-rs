@@ -25,7 +25,7 @@ impl QuicUTP {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let connection = Arc::new(connection);
         let streams = Arc::new(DashMap::new());
-        let datagram_router = DatagramRouter::new(streams.clone(), Arc::downgrade(&connection));
+        let datagram_router = DatagramRouter::new(Arc::downgrade(&connection));
 
         let instance = Self {
             connection: Arc::clone(&connection),
