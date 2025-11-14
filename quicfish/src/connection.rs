@@ -41,6 +41,16 @@ impl QuicUTP {
         instance
     }
 
+    async fn add_unreliable_stream(&self, stream_id: StreamId) -> QuicUTPStream {
+        let recv_queue = self.datagram_router.register_stream(stream_id).await;
+        let stream =
+            QuicUTPStream::new_unreliable(stream_id, Arc::clone(&self.datagram_router), recv_queue);
+
+        self.streams.write().await.insert(stream_id, stream.clone());
+
+        stream
+    }
+
     async fn next_id(&self) -> StreamId {
         self.next_stream_id.fetch_add(1, Ordering::Relaxed)
     }
@@ -105,30 +115,27 @@ impl UTP for QuicUTP {
             }
             IntegrityType::Unreliable => {
                 let stream_id = self.next_id().await;
-                let recv_queue = self.datagram_router.register_stream(stream_id).await;
-                let stream = QuicUTPStream::new_unreliable(
-                    stream_id,
-                    Arc::clone(&self.datagram_router),
-                    recv_queue,
-                );
-
-                self.streams.write().await.insert(stream_id, stream.clone());
-
-                Ok(stream)
+                Ok(self.add_unreliable_stream(stream_id).await)
             }
         }
     }
 
-    async fn wait_stream(&self, id: StreamId) -> Result<Self::Stream, UTPError> {
-        loop {
-            let streams = self.streams.read().await;
-            if let Some(stream) = streams.get(&id) {
-                // TODO register datagram if it's unreliable
-                return Ok(stream.clone());
-            }
-            drop(streams);
+    async fn wait_stream(
+        &self,
+        id: StreamId,
+        integrity: IntegrityType,
+    ) -> Result<Self::Stream, UTPError> {
+        match integrity {
+            IntegrityType::Reliable => loop {
+                let streams = self.streams.read().await;
+                if let Some(stream) = streams.get(&id) {
+                    return Ok(stream.clone());
+                }
+                drop(streams);
 
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            },
+            IntegrityType::Unreliable => Ok(self.add_unreliable_stream(id).await),
         }
     }
 }

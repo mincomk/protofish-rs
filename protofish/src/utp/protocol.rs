@@ -16,6 +16,9 @@ pub trait UTPStream: Send + Sync + 'static {
     /// Returns the unique identifier for this stream.
     fn id(&self) -> StreamId;
 
+    /// Returns the integrity type for this stream.
+    fn integrity_type(&self) -> IntegrityType;
+
     /// Sends binary data over this stream.
     ///
     /// # Errors
@@ -95,7 +98,11 @@ pub trait UTP: Send + Sync + 'static {
     /// # Errors
     ///
     /// Returns an error if the stream cannot be obtained.
-    async fn wait_stream(&self, id: StreamId) -> Result<Self::Stream, UTPError>;
+    async fn wait_stream(
+        &self,
+        id: StreamId,
+        integrity: IntegrityType,
+    ) -> Result<Self::Stream, UTPError>;
 }
 
 /// Events that can occur on a UTP connection.

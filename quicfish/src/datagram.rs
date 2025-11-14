@@ -21,6 +21,7 @@ impl DatagramRouter {
     pub async fn register_stream(&self, id: StreamId) -> mpsc::UnboundedReceiver<Bytes> {
         let (tx, rx) = mpsc::unbounded_channel();
         self.channels.write().await.insert(id, tx);
+        println!("c: {:?}", self.channels);
         rx
     }
 
@@ -42,9 +43,13 @@ impl DatagramRouter {
     }
 
     pub async fn route_incoming(&self, datagram: Bytes) {
+        println!("1a, {:?}", self.channels);
         if let Some((stream_id, payload)) = Self::decode_datagram(datagram) {
+            println!("2a");
             let channels = self.channels.read().await;
+            println!("3a: {} {:?}", stream_id, channels);
             if let Some(tx) = channels.get(&stream_id) {
+                println!("4a");
                 let _ = tx.send(payload);
             }
         }

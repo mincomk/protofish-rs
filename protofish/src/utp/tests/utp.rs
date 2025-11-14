@@ -90,7 +90,11 @@ impl UTP for MockUTP {
         Ok(a)
     }
 
-    async fn wait_stream(&self, stream_id: StreamId) -> Result<MockUTPStream, UTPError> {
+    async fn wait_stream(
+        &self,
+        stream_id: StreamId,
+        _i: IntegrityType,
+    ) -> Result<MockUTPStream, UTPError> {
         loop {
             if let Some((_, stream)) = self.peer_streams.streams.remove(&stream_id) {
                 break Ok(stream);
@@ -138,7 +142,7 @@ mod tests {
             panic!("unknown event: {:?}", evt);
         };
 
-        let s_b = b.wait_stream(id).await.unwrap();
+        let s_b = b.wait_stream(id, IntegrityType::Reliable).await.unwrap();
 
         (s_a, s_b)
     }

@@ -5,6 +5,7 @@ use bytes::{Bytes, BytesMut};
 use tokio::sync::{Mutex, Notify};
 
 use crate::{
+    IntegrityType,
     schema::StreamId,
     utp::{error::UTPError, protocol::UTPStream},
 };
@@ -53,6 +54,10 @@ impl MockUTPStream {
 impl UTPStream for MockUTPStream {
     fn id(&self) -> StreamId {
         self.id
+    }
+
+    fn integrity_type(&self) -> IntegrityType {
+        IntegrityType::Reliable
     }
 
     async fn send(&self, data: &Bytes) -> Result<(), UTPError> {

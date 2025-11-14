@@ -3,9 +3,9 @@ use bytes::Bytes;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use protofish::StreamId;
 use protofish::utp::UTPStream;
 use protofish::utp::error::UTPError;
+use protofish::{IntegrityType, StreamId};
 
 use crate::datagram::DatagramRouter;
 
@@ -59,6 +59,13 @@ impl QuicUTPStream {
 impl UTPStream for QuicUTPStream {
     fn id(&self) -> StreamId {
         self.id
+    }
+
+    fn integrity_type(&self) -> IntegrityType {
+        match &self.inner {
+            StreamInner::Reliable(_) => IntegrityType::Reliable,
+            StreamInner::Unreliable(_) => IntegrityType::Unreliable,
+        }
     }
 
     async fn send(&self, data: &Bytes) -> Result<(), UTPError> {

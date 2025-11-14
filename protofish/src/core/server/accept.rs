@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
+    IntegrityType,
     core::{
         common::{connection::Connection, error::ConnectionError, pmc::PMC},
         server::handshake::server_handshake,
@@ -40,7 +41,7 @@ where
     let event = utp.next_event().await; // TODO maybe timeout
 
     if let UTPEvent::NewStream(id) = event {
-        let stream = utp.wait_stream(id).await?;
+        let stream = utp.wait_stream(id, IntegrityType::Reliable).await?;
         let pmc = PMC::new(true, stream);
 
         server_handshake(&pmc).await?;

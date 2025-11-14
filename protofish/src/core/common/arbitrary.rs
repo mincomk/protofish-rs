@@ -87,7 +87,10 @@ impl<U: UTP> ArbContext<U> {
         let data_got = self.reader.read().await?;
 
         if let Payload::StreamOpen(meta) = data_got {
-            let utp_stream = self.utp.wait_stream(meta.stream_id).await?;
+            let utp_stream = self
+                .utp
+                .wait_stream(meta.stream_id, meta.meta.integrity_type)
+                .await?;
             Ok(ProtofishStream::new(utp_stream))
         } else {
             Err(ArbError::UnexpectedData("expected ArbitaryData".into()))

@@ -95,13 +95,9 @@ async fn test_reliable_stream() {
         .await
         .unwrap();
     let client_utp = Arc::new(QuicUTP::new(conn));
-    println!("c1");
     let client_conn = protofish::connect(client_utp).await.unwrap();
-    println!("c2");
     let arb = client_conn.new_arb();
-    println!("c3");
     let mut stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
-    println!("c4");
 
     let test_data = Bytes::from_static(b"hello");
     stream.write(&test_data).await.unwrap();
@@ -139,11 +135,12 @@ async fn test_unreliable_stream() {
 
             let arb = conn.next_arb().await.unwrap();
 
-            let mut stream = arb.wait_stream().await.unwrap();
             println!("0-");
+            let mut stream = arb.wait_stream().await.unwrap();
+            println!("1");
             let mut buf = vec![2; 100];
 
-            println!("0");
+            println!("2");
 
             timeout(Duration::from_secs(2), stream.read_exact(&mut buf))
                 .await
@@ -173,10 +170,13 @@ async fn test_unreliable_stream() {
     let client_conn = protofish::connect(client_utp).await.unwrap();
     let arb = client_conn.new_arb();
 
+    println!("c1");
     let mut stream = arb.new_stream(IntegrityType::Unreliable).await.unwrap();
+    println!("c2");
 
     let test_data = vec![1u8; 200];
     stream.write(&test_data).await.unwrap();
+    println!("c3");
 
     let mut received = vec![2u8; 100];
     timeout(Duration::from_secs(2), stream.read_exact(&mut received))
