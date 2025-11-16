@@ -8,9 +8,13 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 async fn test_protofish() {
     let (usa, usb) = utp::mock_utp_pairs();
 
-    tokio::spawn(server_run(usb));
+    let handle = tokio::spawn(async move {
+        client_run(usb).await;
+    });
 
-    client_run(usa).await;
+    server_run(usa).await;
+
+    handle.await.unwrap();
 }
 
 async fn client_run<U: UTP>(utp: U) {
@@ -21,9 +25,11 @@ async fn client_run<U: UTP>(utp: U) {
 
     stream.write_all(b"muffinmuffin").await.unwrap();
 
+    tokio::task::yield_now().await;
+
     let mut got = vec![0u8; 8];
     stream.read_exact(&mut got).await.unwrap();
-    assert_eq!(got, b"muffin");
+    assert_eq!(got, b"muffinis");
 }
 
 async fn server_run<U: UTP>(utp: U) {
@@ -36,6 +42,5 @@ async fn server_run<U: UTP>(utp: U) {
     stream.read_exact(&mut got).await.unwrap();
     assert_eq!(got, b"muffinmuffin");
 
-    let v = vec![1u8; 8];
-    stream.write(&v).await.unwrap();
+    stream.write_all(b"muffinis").await.unwrap();
 }

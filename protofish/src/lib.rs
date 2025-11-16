@@ -16,14 +16,14 @@
 //! // Client side
 //! async fn client_example<U: protofish::utp::UTP>(utp: std::sync::Arc<U>) {
 //!     let conn = connect(utp).await.unwrap();
-//!     let (writer, reader) = conn.new_arb();
+//!     let arb = conn.new_arb();
 //!     // Send and receive arbitrary data
 //! }
 //!
 //! // Server side
 //! async fn server_example<U: protofish::utp::UTP>(utp: std::sync::Arc<U>) {
 //!     let conn = accept(utp).await.unwrap();
-//!     let ctx = conn.next_arb().await.unwrap();
+//!     let arb = conn.next_arb().await.unwrap();
 //!     // Handle incoming context
 //! }
 //! ```
