@@ -8,23 +8,31 @@
 //! - Lossy/Lossless binary streaming
 //! - Context tracking for request-response patterns
 //!
+//! # Notes
+//! Since `new_arb()` is internally conceptual function, it does not transfer any data itself.
+//! So waiting for message after `new_arb` will hang.
+//!
 //! # Examples
 //!
 //! ```no_run
-//! use protofish::{connect, accept};
+//! use protofish::{connect, accept, UTP};
 //!
 //! // Client side
-//! async fn client_example<U: protofish::utp::UTP>(utp: std::sync::Arc<U>) {
+//! async fn client_example<U: UTP>(utp: Arc<U>) {
 //!     let conn = connect(utp).await.unwrap();
 //!     let arb = conn.new_arb();
-//!     // Send and receive arbitrary data
+//!
+//!     let mut stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
+//!     // stream: AsyncReadExt + AsyncWriteExt
 //! }
 //!
 //! // Server side
 //! async fn server_example<U: protofish::utp::UTP>(utp: std::sync::Arc<U>) {
 //!     let conn = accept(utp).await.unwrap();
 //!     let arb = conn.next_arb().await.unwrap();
-//!     // Handle incoming context
+//!
+//!     let mut stream = arb.wait_stream().await.unwrap();
+//!     // stream: AsyncReadExt + AsyncWriteExt
 //! }
 //! ```
 
@@ -61,3 +69,4 @@ pub mod utp;
 pub use core::client::connect;
 pub use core::common::arbitrary::*;
 pub use core::server::accept;
+pub use utp::UTP;
