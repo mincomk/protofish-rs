@@ -15,7 +15,8 @@
 //! # Examples
 //!
 //! ```no_run
-//! use protofish::{connect, accept, UTP};
+//! use std::sync::Arc;
+//! use protofish::{connect, accept, UTP, IntegrityType};
 //!
 //! // Client side
 //! async fn client_example<U: UTP>(utp: Arc<U>) {
