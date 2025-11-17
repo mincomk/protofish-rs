@@ -21,7 +21,7 @@ async fn test_basic_connection() {
 
     let server_handle = tokio::spawn(async move {
         if let Some(conn) = server_endpoint.accept().await {
-            let _utp = QuicUTP::new(conn);
+            let _utp = QuicUTP::new(conn, true);
             true
         } else {
             false
@@ -39,7 +39,7 @@ async fn test_basic_connection() {
         .await
         .expect("Failed to connect");
 
-    let _client_utp = QuicUTP::new(conn);
+    let _client_utp = QuicUTP::new(conn, false);
 
     let server_result = timeout(Duration::from_secs(2), server_handle)
         .await
@@ -60,7 +60,7 @@ async fn test_reliable_stream() {
 
     let server_handle = tokio::spawn(async move {
         if let Some(conn) = server_endpoint.accept().await {
-            let utp = Arc::new(QuicUTP::new(conn));
+            let utp = Arc::new(QuicUTP::new(conn, true));
             let conn = protofish::accept(utp).await.unwrap();
 
             let arb = conn.next_arb().await.unwrap();
@@ -85,7 +85,7 @@ async fn test_reliable_stream() {
         .connect(server_addr, "localhost")
         .await
         .unwrap();
-    let client_utp = Arc::new(QuicUTP::new(conn));
+    let client_utp = Arc::new(QuicUTP::new(conn, false));
     let client_conn = protofish::connect(client_utp).await.unwrap();
     let arb = client_conn.new_arb();
     let stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
@@ -116,7 +116,7 @@ async fn test_unreliable_stream() {
 
     let server_handle = tokio::spawn(async move {
         if let Some(conn) = server_endpoint.accept().await {
-            let utp = Arc::new(QuicUTP::new(conn));
+            let utp = Arc::new(QuicUTP::new(conn, true));
             let conn = protofish::accept(utp.clone())
                 .await
                 .expect("failed to accept");
@@ -148,7 +148,7 @@ async fn test_unreliable_stream() {
         .connect(server_addr, "localhost")
         .await
         .unwrap();
-    let client_utp = Arc::new(QuicUTP::new(conn));
+    let client_utp = Arc::new(QuicUTP::new(conn, false));
     let client_conn = protofish::connect(client_utp).await.unwrap();
     let arb = client_conn.new_arb();
 
@@ -187,7 +187,7 @@ async fn test_multiple_streams() {
 
     let server_handle = tokio::spawn(async move {
         if let Some(conn) = server_endpoint.accept().await {
-            let utp = Arc::new(QuicUTP::new(conn));
+            let utp = Arc::new(QuicUTP::new(conn, true));
             let conn = protofish::accept(utp).await.unwrap();
             for _ in 0..3 {
                 let arb = conn.next_arb().await.unwrap();
@@ -215,7 +215,7 @@ async fn test_multiple_streams() {
         .connect(server_addr, "localhost")
         .await
         .unwrap();
-    let client_utp = Arc::new(QuicUTP::new(conn));
+    let client_utp = Arc::new(QuicUTP::new(conn, false));
 
     let mut handles = vec![];
 

@@ -69,5 +69,6 @@ pub mod utp;
 
 pub use core::client::connect;
 pub use core::common::arbitrary::*;
+pub use core::common::connection::*;
 pub use core::server::accept;
 pub use utp::UTP;

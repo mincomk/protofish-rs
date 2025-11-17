@@ -10,14 +10,16 @@ pub struct DatagramRouter {
     conn: Arc<quinn::Connection>,
     channels: Arc<DashMap<StreamId, WriteHalf<SimplexStream>>>,
     pending_readers: Arc<DashMap<StreamId, ReadHalf<SimplexStream>>>,
+    datagram_chunk_size: usize,
 }
 
 impl DatagramRouter {
-    pub fn new(conn: Arc<quinn::Connection>) -> Self {
+    pub fn new(conn: Arc<quinn::Connection>, datagram_chunk_size: usize) -> Self {
         Self {
             conn,
             channels: Default::default(),
             pending_readers: Default::default(),
+            datagram_chunk_size,
         }
     }
 
@@ -42,6 +44,17 @@ impl DatagramRouter {
     }
 
     pub fn write(&self, stream_id: StreamId, data: Bytes) -> crate::error::Result<()> {
+        (0..data.len())
+            .step_by(self.datagram_chunk_size - std::mem::size_of::<StreamId>())
+            .map(|start| {
+                let end = (start + self.datagram_chunk_size).min(data.len());
+                data.slice(start..end)
+            })
+            .map(|chunk| self.write_chunk(stream_id, &chunk))
+            .collect()
+    }
+
+    fn write_chunk(&self, stream_id: StreamId, data: &Bytes) -> crate::error::Result<()> {
         let id_bytes = stream_id.to_le_bytes();
 
         let mut data_bytes = BytesMut::zeroed(id_bytes.len());

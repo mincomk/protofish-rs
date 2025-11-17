@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use dashmap::DashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{Mutex, mpsc};
 
 use protofish::utp::error::UTPError;
@@ -21,16 +22,18 @@ pub struct QuicUTP {
 }
 
 impl QuicUTP {
-    pub fn new(connection: quinn::Connection) -> Self {
+    pub fn new(connection: quinn::Connection, is_server: bool) -> Self {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let connection = Arc::new(connection);
         let streams = Arc::new(DashMap::new());
-        let datagram_router = DatagramRouter::new(connection.clone());
+        // unwrap-safe since we've set it in config
+        let datagram_router =
+            DatagramRouter::new(connection.clone(), connection.max_datagram_size().unwrap());
 
         let instance = Self {
             connection: Arc::clone(&connection),
             streams,
-            next_stream_id: AtomicU64::new(0),
+            next_stream_id: AtomicU64::new(if is_server { 1 } else { 0 }),
             event_tx,
             event_rx: Arc::new(Mutex::new(event_rx)),
             datagram_router: datagram_router.clone(),
@@ -51,28 +54,31 @@ impl QuicUTP {
     }
 
     fn next_id(&self) -> StreamId {
-        self.next_stream_id.fetch_add(1, Ordering::Relaxed)
+        self.next_stream_id.fetch_add(2, Ordering::Relaxed)
     }
 
     fn spawn_stream_listener(&self) {
         let connection = Arc::clone(&self.connection);
         let event_tx = self.event_tx.clone();
         let streams: Arc<DashMap<StreamId, QuicUTPStream>> = Arc::clone(&self.streams);
-        let next_stream_id = AtomicU64::new(self.next_stream_id.load(Ordering::Relaxed));
 
         tokio::spawn(async move {
             loop {
                 match connection.accept_bi().await {
-                    Ok((send, recv)) => {
-                        let stream_id = next_stream_id.fetch_add(1, Ordering::Relaxed);
-                        let stream = QuicUTPStream::new_reliable(stream_id, send, recv);
+                    Ok((send, mut recv)) => match recv.read_u64_le().await {
+                        Ok(stream_id) => {
+                            let stream = QuicUTPStream::new_reliable(stream_id, send, recv);
 
-                        streams.insert(stream_id, stream);
+                            streams.insert(stream_id, stream);
 
-                        if event_tx.send(UTPEvent::NewStream(stream_id)).is_err() {
-                            break;
+                            if event_tx.send(UTPEvent::NewStream(stream_id)).is_err() {
+                                break;
+                            }
                         }
-                    }
+                        Err(_) => {
+                            let _ = event_tx.send(UTPEvent::UnexpectedClose);
+                        }
+                    },
                     Err(_) => {
                         let _ = event_tx.send(UTPEvent::UnexpectedClose);
                         break;
@@ -99,13 +105,16 @@ impl UTP for QuicUTP {
     async fn new_stream(&self, integrity: IntegrityType) -> Result<Self::Stream, UTPError> {
         match integrity {
             IntegrityType::Reliable => {
-                let (send, recv) = self
+                let (mut send, recv) = self
                     .connection
                     .open_bi()
                     .await
                     .map_err(|e| UTPError::Fatal(format!("stream open error: {}", e)))?;
 
                 let stream_id = self.next_id();
+
+                send.write_u64_le(stream_id).await?;
+
                 let stream = QuicUTPStream::new_reliable(stream_id, send, recv);
 
                 self.streams.insert(stream_id, stream.clone());
