@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use bytes::Bytes;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     schema::{IntegrityType, StreamId},
@@ -13,29 +13,18 @@ use crate::{
 /// the `IntegrityType` used when opening the stream.
 #[async_trait]
 pub trait UTPStream: Send + Sync + Unpin + 'static {
+    type StreamRead: AsyncRead;
+    type StreamWrite: AsyncWrite;
+
     /// Returns the unique identifier for this stream.
     fn id(&self) -> StreamId;
 
     /// Returns the integrity type for this stream.
     fn integrity_type(&self) -> IntegrityType;
 
-    /// Sends binary data over this stream.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the send operation fails.
-    async fn send(&self, data: &Bytes) -> Result<(), UTPError>;
+    fn reader(&self) -> Self::StreamRead;
 
-    /// Receives binary data from this stream.
-    ///
-    /// # Arguments
-    ///
-    /// * `len` - The number of bytes to receive
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the receive operation fails.
-    async fn receive(&self, len: usize) -> Result<Bytes, UTPError>;
+    fn writer(&self) -> Self::StreamWrite;
 
     /// Closes this stream.
     ///
