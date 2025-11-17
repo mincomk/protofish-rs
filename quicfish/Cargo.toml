@@ -1,0 +1,26 @@
+[package]
+name = "quicfish"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+protofish = { path = "../protofish" }
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+async-trait = "0.1"
+thiserror = "1"
+rustls = { version = "0.23", default-features = false }
+quinn = "0.11.9"
+dashmap = "6.1.0"
+tracing = "0.1.41"
+
+[dev-dependencies]
+rcgen = "0.13"
+proptest = "1"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+anyhow = "1"
+tracing-subscriber = "0.3.20"
+
+[[bench]]
+name = "throughput"
+harness = false

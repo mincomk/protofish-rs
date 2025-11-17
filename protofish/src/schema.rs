@@ -1,4 +1,14 @@
-use crate::proto_schema;
+mod common {
+    mod schema;
+    mod transform;
+    pub use schema::*;
+}
 
-proto_schema!(common);
-proto_schema!(payload);
+mod payload {
+    mod schema;
+    mod transform;
+    pub use schema::*;
+}
+
+pub use common::*;
+pub use payload::*;
