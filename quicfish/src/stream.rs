@@ -68,7 +68,7 @@ impl UTPStream for QuicUTPStream {
         }
     }
 
-    async fn send(&self, data: &[u8]) -> Result<(), UTPError> {
+    async fn send(&self, data: &Bytes) -> Result<(), UTPError> {
         match &self.inner {
             StreamInner::Reliable(stream) => {
                 let mut send = stream.send.lock().await;
@@ -80,7 +80,7 @@ impl UTPStream for QuicUTPStream {
             StreamInner::Unreliable(stream) => {
                 stream
                     .router
-                    .send_datagram(self.id, &Bytes::copy_from_slice(data))
+                    .send_datagram(self.id, data)
                     .await
                     .map_err(|e| UTPError::Fatal(format!("send datagram error: {}", e)))?;
                 Ok(())
@@ -88,24 +88,23 @@ impl UTPStream for QuicUTPStream {
         }
     }
 
-    async fn receive(&self, buf: &mut [u8]) -> Result<(), UTPError> {
+    async fn receive(&self, len: usize) -> Result<Bytes, UTPError> {
         match &self.inner {
             StreamInner::Reliable(stream) => {
                 let mut recv = stream.recv.lock().await;
+                let mut buf = vec![0u8; len];
 
-                recv.read_exact(buf)
-                    .await
-                    .map_err(|err| UTPError::Fatal(format!("receive error: {}", err)))
+                match recv.read_exact(&mut buf).await {
+                    Ok(()) => Ok(Bytes::from(buf)),
+                    Err(e) => Err(UTPError::Fatal(format!("receive error: {}", e))),
+                }
             }
             StreamInner::Unreliable(stream) => {
                 let mut queue = stream.recv_queue.lock().await;
-                let bytes = queue
+                queue
                     .recv()
                     .await
-                    .ok_or_else(|| UTPError::Fatal("connection closed".to_string()))?;
-                buf[..bytes.len()].copy_from_slice(&bytes);
-
-                Ok(())
+                    .ok_or_else(|| UTPError::Fatal("connection closed".to_string()))
             }
         }
     }
