@@ -21,9 +21,7 @@ pub trait UTPStream: Send + Sync + 'static {
     /// Returns the integrity type for this stream.
     fn integrity_type(&self) -> IntegrityType;
 
-    fn reader(&self) -> Self::StreamRead;
-
-    fn writer(&self) -> Self::StreamWrite;
+    fn split(self) -> (Self::StreamWrite, Self::StreamRead);
 }
 
 /// Trait defining the Upstream Transport Protocol (UTP) interface.

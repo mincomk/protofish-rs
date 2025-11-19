@@ -10,22 +10,19 @@ use protofish::{IntegrityType, StreamId};
 
 use crate::datagram::DatagramRouter;
 
-#[derive(Clone)]
 pub struct QuicUTPStream {
     id: StreamId,
     inner: StreamInner,
 }
 
-#[derive(Clone)]
 enum StreamInner {
     Reliable(ReliableStream),
     Unreliable(UnreliableStream),
 }
 
-#[derive(Clone)]
 struct ReliableStream {
-    send: Arc<Mutex<quinn::SendStream>>,
-    recv: Arc<Mutex<quinn::RecvStream>>,
+    send: quinn::SendStream,
+    recv: quinn::RecvStream,
 }
 
 #[derive(Clone)]
@@ -39,10 +36,7 @@ impl QuicUTPStream {
     pub fn new_reliable(id: StreamId, send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
         Self {
             id,
-            inner: StreamInner::Reliable(ReliableStream {
-                send: Arc::new(Mutex::new(send)),
-                recv: Arc::new(Mutex::new(recv)),
-            }),
+            inner: StreamInner::Reliable(ReliableStream { send, recv }),
         }
     }
 
@@ -75,12 +69,12 @@ impl UTPStream for QuicUTPStream {
         }
     }
 
-    fn reader(&self) -> Self::StreamRead {
-        self.clone()
+    fn reader(&self) -> &'a Self::StreamRead {
+        self
     }
 
-    fn writer(&self) -> Self::StreamWrite {
-        self.clone()
+    fn writer(&self) -> &'a Self::StreamWrite {
+        self
     }
 }
 

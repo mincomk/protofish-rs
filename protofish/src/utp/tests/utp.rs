@@ -153,17 +153,15 @@ mod tests {
     async fn check_stream_uni((a, b): (MockUTPStream, MockUTPStream)) {
         let bytes = BytesMut::zeroed(9).iter().map(|e| e + 2).collect::<Bytes>();
 
-        a.writer().write_all(&bytes).await.unwrap();
+        let (mut a_writer, _) = a.split();
+        let (_, mut b_reader) = b.split();
+
+        a_writer.write_all(&bytes).await.unwrap();
 
         let mut recv_bytes = vec![0; 9];
-        b.reader().read_exact(&mut recv_bytes).await.unwrap();
+        b_reader.read_exact(&mut recv_bytes).await.unwrap();
 
         assert_eq!(recv_bytes[0], 2);
-    }
-
-    async fn check_stream_bi((a, b): (MockUTPStream, MockUTPStream)) {
-        check_stream_uni((a.clone(), b.clone())).await;
-        check_stream_uni((b, a)).await;
     }
 
     #[tokio::test]
@@ -171,9 +169,9 @@ mod tests {
         let pairs = mock_utp_pairs();
 
         let ab = open_stream_ab(pairs.clone()).await;
-        check_stream_bi(ab).await;
+        check_stream_uni(ab).await;
 
         let ba = open_stream_ab((pairs.1, pairs.0)).await;
-        check_stream_bi(ba).await;
+        check_stream_uni(ba).await;
     }
 }

@@ -3,7 +3,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use protofish::IntegrityType;
 use quicfish::{QuicConfig, QuicEndpoint, QuicUTP};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 
@@ -18,6 +18,21 @@ fn spawn_echo_server(server: quicfish::ArbContext, size: usize) -> tokio::task::
         let mut data = vec![0; size];
         stream.reader().read_exact(&mut data).await.unwrap();
         stream.writer().write_all(&data).await.unwrap();
+    })
+}
+
+fn spawn_iter_server(
+    server: quicfish::ArbContext,
+    size: usize,
+    iters: u64,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let stream = server.wait_stream().await.unwrap();
+
+        let mut data = vec![0; size];
+        for _ in 0..iters {
+            stream.reader().read_exact(&mut data).await.unwrap();
+        }
     })
 }
 
@@ -81,19 +96,23 @@ fn bench_reliable_stream_throughput(c: &mut Criterion) {
         group.sample_size(80);
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.to_async(&rt).iter(|| async {
+            b.to_async(&rt).iter_custom(|iters| async move {
                 let (client, server) = setup_connection().await;
 
-                let server_handle = spawn_echo_server(server, size);
+                let server_handle = spawn_iter_server(server, size, iters);
 
                 let stream = client.new_stream(IntegrityType::Reliable).await.unwrap();
                 let data = Bytes::from(vec![0u8; size]);
-                stream.writer().write_all(&data).await.unwrap();
 
-                let mut response = vec![0; size];
-                stream.reader().read_exact(&mut response).await.unwrap();
+                let start = Instant::now();
+
+                for _ in 0..iters {
+                    stream.writer().write_all(&data).await.unwrap();
+                }
 
                 server_handle.await.unwrap();
+
+                start.elapsed()
             });
         });
     }
