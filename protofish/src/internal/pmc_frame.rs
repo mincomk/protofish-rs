@@ -26,6 +26,7 @@ where
     senders: SenderMap,
     context_rx: Mutex<UnboundedReceiver<Message>>,
     writer: Mutex<U::StreamWrite>,
+    shutdown_notify: Arc<Notify>,
     _task: JoinHandle<()>,
 }
 
@@ -61,6 +62,7 @@ where
         Self {
             senders,
             context_rx: Mutex::new(context_rx),
+            shutdown_notify,
             writer: Mutex::new(writer),
             _task,
         }
@@ -101,6 +103,12 @@ where
     }
 }
 
+impl<U: UTPStream> Drop for PMCFrame<U> {
+    fn drop(&mut self) {
+        self.shutdown_notify.notify_waiters();
+    }
+}
+
 async fn match_frame<R: AsyncRead + Unpin>(
     stream: &mut R,
     senders: SenderMap,
@@ -128,9 +136,9 @@ async fn match_frame<R: AsyncRead + Unpin>(
             tracing::warn!("UTP receive warn: {}", e);
             true
         }
-        Err(UTPError::Io(e)) => {
-            tracing::error!("UTP receive IO error: {}", e);
-            true
+        Err(UTPError::Io(_)) => {
+            // stream closed
+            false
         }
     }
 }

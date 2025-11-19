@@ -58,6 +58,8 @@ async fn test_reliable_stream() {
         .expect("Failed to create server endpoint");
     let server_addr = server_endpoint.local_addr().unwrap();
 
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+
     let server_handle = tokio::spawn(async move {
         if let Some(conn) = server_endpoint.accept().await {
             let utp = Arc::new(QuicUTP::new(conn, true));
@@ -65,10 +67,16 @@ async fn test_reliable_stream() {
 
             let arb = conn.next_arb().await.unwrap();
             let stream = arb.wait_stream().await.unwrap();
+            let (mut writer, mut reader) = stream.split();
 
             let mut buf = vec![2; 5];
-            stream.reader().read_exact(&mut buf).await.unwrap();
-            stream.writer().write(&buf).await.unwrap();
+            reader.read_exact(&mut buf).await.unwrap();
+            writer.write(&buf).await.unwrap();
+
+            writer.flush().await.unwrap();
+            writer.shutdown().await.unwrap();
+
+            ready_rx.await.unwrap();
 
             return true;
         }
@@ -89,12 +97,17 @@ async fn test_reliable_stream() {
     let client_conn = protofish::connect(client_utp).await.unwrap();
     let arb = client_conn.new_arb();
     let stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
+    let (mut writer, mut reader) = stream.split();
 
     let test_data = Bytes::from_static(b"hello");
-    stream.writer().write(&test_data).await.unwrap();
+    writer.write_all(&test_data).await.unwrap();
+    writer.flush().await.unwrap();
 
     let mut buf = vec![2; 5];
-    stream.reader().read_exact(&mut buf).await.unwrap();
+    reader.read_exact(&mut buf).await.unwrap();
+
+    ready_tx.send(()).unwrap();
+
     assert_eq!(buf, test_data);
 
     let server_result = timeout(Duration::from_secs(2), server_handle)
@@ -114,6 +127,8 @@ async fn test_unreliable_stream() {
         .expect("Failed to create server endpoint");
     let server_addr = server_endpoint.local_addr().unwrap();
 
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+
     let server_handle = tokio::spawn(async move {
         if let Some(conn) = server_endpoint.accept().await {
             let utp = Arc::new(QuicUTP::new(conn, true));
@@ -124,14 +139,17 @@ async fn test_unreliable_stream() {
             let arb = conn.next_arb().await.unwrap();
 
             let stream = arb.wait_stream().await.unwrap();
+            let (mut writer, mut reader) = stream.split();
             let mut buf = vec![2; 100];
 
-            timeout(Duration::from_secs(2), stream.reader().read_exact(&mut buf))
+            timeout(Duration::from_secs(2), reader.read_exact(&mut buf))
                 .await
                 .expect("Receive timeout")
                 .unwrap();
 
-            stream.writer().write(&buf).await.unwrap();
+            writer.write(&buf).await.unwrap();
+
+            ready_rx.await.unwrap();
 
             return true;
         }
@@ -153,18 +171,18 @@ async fn test_unreliable_stream() {
     let arb = client_conn.new_arb();
 
     let stream = arb.new_stream(IntegrityType::Unreliable).await.unwrap();
+    let (mut writer, mut reader) = stream.split();
 
     let test_data = vec![1u8; 200];
-    stream.writer().write(&test_data).await.unwrap();
+    writer.write(&test_data).await.unwrap();
 
     let mut received = vec![2u8; 100];
-    timeout(
-        Duration::from_secs(2),
-        stream.reader().read_exact(&mut received),
-    )
-    .await
-    .expect("Receive timeout")
-    .unwrap();
+    timeout(Duration::from_secs(2), reader.read_exact(&mut received))
+        .await
+        .expect("Receive timeout")
+        .unwrap();
+
+    ready_tx.send(()).unwrap();
 
     assert!(received.iter().all(|x| *x == 1));
 
@@ -193,10 +211,11 @@ async fn test_multiple_streams() {
                 let arb = conn.next_arb().await.unwrap();
 
                 let stream = arb.wait_stream().await.unwrap();
+                let (mut writer, mut reader) = stream.split();
 
                 let mut data = vec![2u8; 10];
-                stream.reader().read_exact(&mut data).await.unwrap();
-                stream.writer().write(&data).await.unwrap();
+                reader.read_exact(&mut data).await.unwrap();
+                writer.write(&data).await.unwrap();
             }
 
             tokio::time::sleep(Duration::from_secs(1)).await;
@@ -227,12 +246,13 @@ async fn test_multiple_streams() {
 
         let handle = tokio::spawn(async move {
             let stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
+            let (mut writer, mut reader) = stream.split();
 
             let test_data = [5u8; 10];
-            stream.writer().write(&test_data).await.unwrap();
+            writer.write(&test_data).await.unwrap();
 
             let mut received = vec![9u8; 10];
-            stream.reader().read_exact(&mut received).await.unwrap();
+            reader.read_exact(&mut received).await.unwrap();
             assert_eq!(received, test_data);
         });
         handles.push(handle);

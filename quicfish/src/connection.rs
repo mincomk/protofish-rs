@@ -26,7 +26,7 @@ impl QuicUTP {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
         let connection = Arc::new(connection);
         let streams = Arc::new(DashMap::new());
-        // unwrap-safe since we've set it in config
+        // unwrap-safe since we've set it in the config
         let datagram_router =
             DatagramRouter::new(connection.clone(), connection.max_datagram_size().unwrap());
 
@@ -47,8 +47,6 @@ impl QuicUTP {
 
     fn add_unreliable_stream(&self, stream_id: StreamId) -> QuicUTPStream {
         let stream = QuicUTPStream::new_unreliable(stream_id, self.datagram_router.clone());
-
-        self.streams.insert(stream_id, stream.clone());
 
         stream
     }
@@ -117,8 +115,6 @@ impl UTP for QuicUTP {
 
                 let stream = QuicUTPStream::new_reliable(stream_id, send, recv);
 
-                self.streams.insert(stream_id, stream.clone());
-
                 Ok(stream)
             }
             IntegrityType::Unreliable => {
@@ -135,11 +131,11 @@ impl UTP for QuicUTP {
     ) -> Result<Self::Stream, UTPError> {
         match integrity {
             IntegrityType::Reliable => loop {
-                if let Some(stream) = self.streams.get(&id) {
-                    return Ok(stream.clone());
+                if let Some((_, stream)) = self.streams.remove(&id) {
+                    return Ok(stream);
                 }
 
-                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                tokio::task::yield_now().await;
             },
             IntegrityType::Unreliable => Ok(self.add_unreliable_stream(id)),
         }
