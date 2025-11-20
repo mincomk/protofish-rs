@@ -9,11 +9,8 @@ impl<U: UTPStream> ProtofishStream<U> {
         Self { stream }
     }
 
-    pub fn reader(&self) -> U::StreamRead {
-        self.stream.reader()
-    }
-
-    pub fn writer(&self) -> U::StreamWrite {
-        self.stream.writer()
+    #[inline(always)]
+    pub fn split(self) -> (U::StreamWrite, U::StreamRead) {
+        self.stream.split()
     }
 }

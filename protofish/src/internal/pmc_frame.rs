@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use dashmap::DashMap;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     sync::{
         Mutex, Notify,
         mpsc::{self, UnboundedReceiver, UnboundedSender},
@@ -19,20 +19,29 @@ use crate::{
 
 type SenderMap = Arc<DashMap<ContextId, UnboundedSender<Payload>>>;
 
-pub struct PMCFrame {
+pub struct PMCFrame<U>
+where
+    U: UTPStream,
+{
     senders: SenderMap,
     context_rx: Mutex<UnboundedReceiver<Message>>,
+    writer: Mutex<U::StreamWrite>,
+    shutdown_notify: Arc<Notify>,
     _task: JoinHandle<()>,
 }
 
-impl PMCFrame {
-    pub fn new(stream: Arc<impl UTPStream>) -> Self {
+impl<U> PMCFrame<U>
+where
+    U: UTPStream,
+{
+    pub fn new(stream: U) -> Self {
         let senders: SenderMap = Default::default();
         let (context_tx, context_rx) = mpsc::unbounded_channel();
         let shutdown_notify = Arc::new(Notify::new());
 
+        let (writer, mut reader) = stream.split();
+
         let _task = {
-            let stream = stream.clone();
             let senders = senders.clone();
             let notify = shutdown_notify.clone();
 
@@ -42,7 +51,7 @@ impl PMCFrame {
                         _ = notify.notified() => {
                             break;
                         }
-                        success = match_frame(stream.clone(), senders.clone(), context_tx.clone()) => {
+                        success = match_frame(&mut reader, senders.clone(), context_tx.clone()) => {
                             if !success {break;}
                         }
                     }
@@ -53,6 +62,8 @@ impl PMCFrame {
         Self {
             senders,
             context_rx: Mutex::new(context_rx),
+            shutdown_notify,
+            writer: Mutex::new(writer),
             _task,
         }
     }
@@ -76,10 +87,30 @@ impl PMCFrame {
     pub async fn next_context_message(&self) -> Option<Message> {
         self.context_rx.lock().await.recv().await
     }
+
+    pub async fn send_frame(&self, message: Message) -> Result<(), UTPError> {
+        let buf = serialize_message(message);
+
+        let len: u64 = buf.len() as u64;
+        let len_bytes = len.to_le_bytes();
+        let len_bytes = Bytes::copy_from_slice(&len_bytes);
+
+        let mut writer = self.writer.lock().await;
+        writer.write_all(&len_bytes).await?;
+        writer.write_all(&buf).await?;
+
+        Ok(())
+    }
 }
 
-async fn match_frame(
-    stream: Arc<impl UTPStream>,
+impl<U: UTPStream> Drop for PMCFrame<U> {
+    fn drop(&mut self) {
+        self.shutdown_notify.notify_waiters();
+    }
+}
+
+async fn match_frame<R: AsyncRead + Unpin>(
+    stream: &mut R,
     senders: SenderMap,
     context_tx: UnboundedSender<Message>,
 ) -> bool {
@@ -105,31 +136,18 @@ async fn match_frame(
             tracing::warn!("UTP receive warn: {}", e);
             true
         }
-        Err(UTPError::Io(e)) => {
-            tracing::error!("UTP receive IO error: {}", e);
-            true
+        Err(UTPError::Io(_)) => {
+            // stream closed
+            false
         }
     }
 }
 
-pub async fn send_frame<S: UTPStream>(stream: &S, message: Message) -> Result<(), UTPError> {
-    let buf = serialize_message(message);
-
-    let len: u64 = buf.len() as u64;
-    let len_bytes = len.to_le_bytes();
-    let len_bytes = Bytes::copy_from_slice(&len_bytes);
-
-    stream.writer().write_all(&len_bytes).await?;
-    stream.writer().write_all(&buf).await?;
-
-    Ok(())
-}
-
-async fn recv_frame<S: UTPStream>(stream: Arc<S>) -> Result<Option<Message>, UTPError> {
-    let len = stream.reader().read_u64_le().await?;
+async fn recv_frame<R: AsyncRead + Unpin>(stream: &mut R) -> Result<Option<Message>, UTPError> {
+    let len = stream.read_u64_le().await?;
 
     let mut buf = vec![0; len as usize];
-    stream.reader().read_exact(&mut buf).await?;
+    stream.read_exact(&mut buf).await?;
 
     let message = deserialize_message(&buf);
 

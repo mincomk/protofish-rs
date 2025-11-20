@@ -1,44 +1,35 @@
-use tokio::io::DuplexStream;
+use tokio::io::{DuplexStream, ReadHalf, WriteHalf};
 
-use crate::{
-    IntegrityType,
-    schema::StreamId,
-    utp::{protocol::UTPStream, tests::duplex::DuplexMockUTP},
-};
+use crate::{IntegrityType, schema::StreamId, utp::protocol::UTPStream};
 
-#[derive(Clone)]
 pub struct MockUTPStream {
     pub id: StreamId,
-    stream: DuplexMockUTP,
+    stream: DuplexStream,
 }
 
 impl MockUTPStream {
     pub fn new(id: StreamId, stream: DuplexStream) -> Self {
-        Self {
-            id,
-            stream: DuplexMockUTP::new(stream),
-        }
+        Self { id, stream }
     }
 }
 
 impl UTPStream for MockUTPStream {
-    type StreamRead = DuplexMockUTP;
-    type StreamWrite = DuplexMockUTP;
+    type StreamRead = ReadHalf<DuplexStream>;
+    type StreamWrite = WriteHalf<DuplexStream>;
 
     fn id(&self) -> StreamId {
         self.id
     }
 
+    #[inline(always)]
     fn integrity_type(&self) -> IntegrityType {
         IntegrityType::Reliable
     }
 
-    fn reader(&self) -> Self::StreamRead {
-        self.stream.clone()
-    }
-
-    fn writer(&self) -> Self::StreamWrite {
-        self.stream.clone()
+    #[inline(always)]
+    fn split(self) -> (Self::StreamWrite, Self::StreamRead) {
+        let (a, b) = tokio::io::split(self.stream);
+        (b, a)
     }
 }
 
@@ -62,7 +53,10 @@ mod tests {
     async fn test_mock_pairs_atob() {
         let (a, b) = mock_utp_stream_pairs(0);
 
-        a.writer()
+        let (mut a_writer, _) = a.split();
+        let (_, mut b_reader) = b.split();
+
+        a_writer
             .write_all(
                 &BytesMut::zeroed(14)
                     .iter()
@@ -74,7 +68,7 @@ mod tests {
             .unwrap();
 
         let mut b_data = vec![0; 14];
-        b.reader().read_exact(&mut b_data).await.unwrap();
+        b_reader.read_exact(&mut b_data).await.unwrap();
 
         assert_eq!(b_data[13], 1);
     }
@@ -83,7 +77,10 @@ mod tests {
     async fn test_mock_pairs_btoa() {
         let (a, b) = mock_utp_stream_pairs(0);
 
-        b.writer()
+        let (_, mut a_reader) = a.split();
+        let (mut b_writer, _) = b.split();
+
+        b_writer
             .write_all(
                 &BytesMut::zeroed(14)
                     .iter()
@@ -95,7 +92,7 @@ mod tests {
             .unwrap();
 
         let mut a_data = vec![0; 14];
-        a.reader().read_exact(&mut a_data).await.unwrap();
+        a_reader.read_exact(&mut a_data).await.unwrap();
 
         assert_eq!(a_data[13], 1);
     }

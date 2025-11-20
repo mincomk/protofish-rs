@@ -1,48 +1,37 @@
 use bytes::Bytes;
 use std::io::ErrorKind;
-use std::sync::Arc;
 use std::task::Poll;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadHalf, SimplexStream};
-use tokio::sync::Mutex;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, SimplexStream};
 
 use protofish::utp::UTPStream;
 use protofish::{IntegrityType, StreamId};
 
 use crate::datagram::DatagramRouter;
 
-#[derive(Clone)]
 pub struct QuicUTPStream {
     id: StreamId,
-    inner: StreamInner,
+    integrity_type: IntegrityType,
+    writer: StreamWriteInner,
+    reader: StreamReadInner,
 }
 
-#[derive(Clone)]
-enum StreamInner {
-    Reliable(ReliableStream),
-    Unreliable(UnreliableStream),
+pub enum StreamWriteInner {
+    Reliable(quinn::SendStream),
+    Unreliable(DatagramRouter, StreamId),
 }
 
-#[derive(Clone)]
-struct ReliableStream {
-    send: Arc<Mutex<quinn::SendStream>>,
-    recv: Arc<Mutex<quinn::RecvStream>>,
-}
-
-#[derive(Clone)]
-struct UnreliableStream {
-    router: DatagramRouter,
-    stream_id: StreamId,
-    read_half: Arc<Mutex<ReadHalf<SimplexStream>>>,
+pub enum StreamReadInner {
+    Reliable(quinn::RecvStream),
+    Unreliable(ReadHalf<SimplexStream>),
 }
 
 impl QuicUTPStream {
     pub fn new_reliable(id: StreamId, send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
         Self {
             id,
-            inner: StreamInner::Reliable(ReliableStream {
-                send: Arc::new(Mutex::new(send)),
-                recv: Arc::new(Mutex::new(recv)),
-            }),
+            integrity_type: IntegrityType::Reliable,
+            writer: StreamWriteInner::Reliable(send),
+            reader: StreamReadInner::Reliable(recv),
         }
     }
 
@@ -51,54 +40,45 @@ impl QuicUTPStream {
 
         Self {
             id,
-            inner: StreamInner::Unreliable(UnreliableStream {
-                router,
-                stream_id: id,
-                read_half: Arc::new(read_half.into()),
-            }),
+            integrity_type: IntegrityType::Unreliable,
+            writer: StreamWriteInner::Unreliable(router, id),
+            reader: StreamReadInner::Unreliable(read_half),
         }
     }
 }
 
 impl UTPStream for QuicUTPStream {
-    type StreamRead = Self;
-    type StreamWrite = Self;
+    type StreamRead = StreamReadInner;
+    type StreamWrite = StreamWriteInner;
 
     fn id(&self) -> StreamId {
         self.id
     }
 
     fn integrity_type(&self) -> IntegrityType {
-        match &self.inner {
-            StreamInner::Reliable(_) => IntegrityType::Reliable,
-            StreamInner::Unreliable(_) => IntegrityType::Unreliable,
-        }
+        self.integrity_type.clone()
     }
 
-    fn reader(&self) -> Self::StreamRead {
-        self.clone()
-    }
-
-    fn writer(&self) -> Self::StreamWrite {
-        self.clone()
+    fn split(self) -> (Self::StreamWrite, Self::StreamRead) {
+        (self.writer, self.reader)
     }
 }
 
-impl AsyncRead for QuicUTPStream {
+impl AsyncRead for StreamReadInner {
     fn poll_read(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> Poll<std::io::Result<()>> {
         Box::pin(async move {
-            match self.inner {
-                StreamInner::Reliable(ref reliable) => {
-                    reliable.recv.lock().await.read_buf(buf).await?;
+            match *self {
+                StreamReadInner::Reliable(ref mut reliable) => {
+                    reliable.read_buf(buf).await?;
 
                     Ok(())
                 }
-                StreamInner::Unreliable(ref unreliable) => {
-                    unreliable.read_half.lock().await.read_buf(buf).await?;
+                StreamReadInner::Unreliable(ref mut unreliable) => {
+                    unreliable.read_buf(buf).await?;
 
                     Ok(())
                 }
@@ -109,25 +89,21 @@ impl AsyncRead for QuicUTPStream {
     }
 }
 
-impl AsyncWrite for QuicUTPStream {
+impl AsyncWrite for StreamWriteInner {
     fn poll_write(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, std::io::Error>> {
         Box::pin(async move {
-            match self.inner {
-                StreamInner::Reliable(ref reliable) => reliable
-                    .send
-                    .lock()
-                    .await
-                    .write(buf)
-                    .await
-                    .map_err(|err| std::io::Error::new(ErrorKind::Other, err.to_string())),
-                StreamInner::Unreliable(ref unreliable) => {
+            match *self {
+                StreamWriteInner::Reliable(ref mut reliable) => {
+                    let written = reliable.write(buf).await?;
+                    Ok(written)
+                }
+                StreamWriteInner::Unreliable(ref mut unreliable, stream_id) => {
                     unreliable
-                        .router
-                        .write(unreliable.stream_id, Bytes::copy_from_slice(buf))
+                        .write(stream_id, Bytes::copy_from_slice(buf))
                         .map_err(|err| std::io::Error::new(ErrorKind::Other, err.to_string()))?;
 
                     Ok(buf.len())
@@ -139,16 +115,38 @@ impl AsyncWrite for QuicUTPStream {
     }
 
     fn poll_flush(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        Poll::Ready(Ok(()))
+        Box::pin(async move {
+            match *self {
+                Self::Reliable(ref mut reliable) => {
+                    reliable.flush().await?;
+
+                    Ok(())
+                }
+                _ => Ok(()),
+            }
+        })
+        .as_mut()
+        .poll(cx)
     }
 
     fn poll_shutdown(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
     ) -> Poll<Result<(), std::io::Error>> {
-        Poll::Ready(Ok(()))
+        Box::pin(async move {
+            match *self {
+                Self::Reliable(ref mut reliable) => {
+                    reliable.shutdown().await?;
+
+                    Ok(())
+                }
+                _ => Ok(()),
+            }
+        })
+        .as_mut()
+        .poll(cx)
     }
 }

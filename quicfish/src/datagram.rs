@@ -44,10 +44,12 @@ impl DatagramRouter {
     }
 
     pub fn write(&self, stream_id: StreamId, data: Bytes) -> crate::error::Result<()> {
+        let actual_chunk_size = self.datagram_chunk_size - std::mem::size_of::<StreamId>();
+
         (0..data.len())
-            .step_by(self.datagram_chunk_size - std::mem::size_of::<StreamId>())
+            .step_by(actual_chunk_size)
             .map(|start| {
-                let end = (start + self.datagram_chunk_size).min(data.len());
+                let end = (start + actual_chunk_size).min(data.len());
                 data.slice(start..end)
             })
             .map(|chunk| self.write_chunk(stream_id, &chunk))
@@ -71,7 +73,7 @@ impl DatagramRouter {
             return Err(crate::error::Error::StreamClosed);
         };
 
-        channel.write(data).await?;
+        channel.write_all(data).await?;
 
         Ok(())
     }

@@ -3,7 +3,7 @@ use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_m
 use protofish::IntegrityType;
 use quicfish::{QuicConfig, QuicEndpoint, QuicUTP};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::runtime::Runtime;
 
@@ -11,13 +11,19 @@ use tokio::runtime::Runtime;
 mod common;
 use common::create_test_certs;
 
-fn spawn_echo_server(server: quicfish::ArbContext, size: usize) -> tokio::task::JoinHandle<()> {
+fn spawn_iter_server(
+    server: quicfish::ArbContext,
+    size: usize,
+    iters: u64,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let stream = server.wait_stream().await.unwrap();
+        let (_writer, mut reader) = stream.split();
 
         let mut data = vec![0; size];
-        stream.reader().read_exact(&mut data).await.unwrap();
-        stream.writer().write_all(&data).await.unwrap();
+        for _ in 0..iters {
+            reader.read_exact(&mut data).await.unwrap();
+        }
     })
 }
 
@@ -78,22 +84,27 @@ fn bench_reliable_stream_throughput(c: &mut Criterion) {
     for size in [1024, 4096, 16384, 65536, 262144].iter() {
         group.throughput(Throughput::Bytes(*size as u64));
 
-        group.sample_size(80);
+        group.sample_size(100);
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.to_async(&rt).iter(|| async {
+            b.to_async(&rt).iter_custom(|iters| async move {
                 let (client, server) = setup_connection().await;
 
-                let server_handle = spawn_echo_server(server, size);
+                let server_handle = spawn_iter_server(server, size, iters);
 
                 let stream = client.new_stream(IntegrityType::Reliable).await.unwrap();
+                let (mut writer, _reader) = stream.split();
                 let data = Bytes::from(vec![0u8; size]);
-                stream.writer().write_all(&data).await.unwrap();
 
-                let mut response = vec![0; size];
-                stream.reader().read_exact(&mut response).await.unwrap();
+                let start = Instant::now();
+
+                for _ in 0..iters {
+                    writer.write_all(&data).await.unwrap();
+                }
 
                 server_handle.await.unwrap();
+
+                start.elapsed()
             });
         });
     }
@@ -111,20 +122,26 @@ fn bench_unreliable_stream_throughput(c: &mut Criterion) {
         group.sample_size(90);
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            b.to_async(&rt).iter(|| async {
+            b.to_async(&rt).iter_custom(|iters| async move {
                 let (client, server) = setup_connection().await;
 
-                let server_handle = spawn_echo_server(server, size * (4 / 5));
+                let lossy_size = size * (9 / 10);
+                let server_handle = spawn_iter_server(server, lossy_size, iters);
 
                 let stream = client.new_stream(IntegrityType::Unreliable).await.unwrap();
+                let (mut writer, _reader) = stream.split();
 
                 let data = Bytes::from(vec![0u8; size]);
-                stream.writer().write_all(&data).await.unwrap();
 
-                let mut response = vec![0; size * (3 / 5)];
-                stream.reader().read_exact(&mut response).await.unwrap();
+                let start = Instant::now();
+
+                for _ in 0..iters {
+                    writer.write_all(&data).await.unwrap();
+                }
 
                 server_handle.await.unwrap();
+
+                start.elapsed()
             });
         });
     }
@@ -153,21 +170,20 @@ fn bench_concurrent_streams(c: &mut Criterion) {
                         tokio::spawn(async move {
                             for _ in 0..num_streams {
                                 let stream = server.wait_stream().await.unwrap();
+                                let (_writer, mut reader) = stream.split();
 
                                 let mut data = vec![0; 4096];
-                                stream.reader().read_exact(&mut data).await.unwrap();
-                                stream.writer().write_all(&data).await.unwrap();
+                                reader.read_exact(&mut data).await.unwrap();
                             }
                         })
                     };
 
                     for _ in 0..num_streams {
                         let stream = client.new_stream(IntegrityType::Reliable).await.unwrap();
-                        let data = Bytes::from(vec![0u8; 4096]);
-                        stream.writer().write_all(&data).await.unwrap();
+                        let (mut writer, _reader) = stream.split();
 
-                        let mut response = vec![0; 4096];
-                        stream.reader().read_exact(&mut response).await.unwrap();
+                        let data = Bytes::from(vec![0u8; 4096]);
+                        writer.write_all(&data).await.unwrap();
                     }
 
                     server_handle.await.unwrap();
@@ -201,22 +217,26 @@ fn bench_bulk_transfer(c: &mut Criterion) {
                     let server_handle = {
                         tokio::spawn(async move {
                             let stream = server.wait_stream().await.unwrap();
+                            let (mut writer, mut reader) = stream.split();
+
                             for _ in 0..num_chunks {
                                 let mut data = vec![0; chunk_size];
-                                stream.reader().read_exact(&mut data).await.unwrap();
+                                reader.read_exact(&mut data).await.unwrap();
 
-                                stream.writer().write_all(&data).await.unwrap();
+                                writer.write_all(&data).await.unwrap();
                             }
                         })
                     };
 
                     let stream = client.new_stream(IntegrityType::Reliable).await.unwrap();
+                    let (mut writer, mut reader) = stream.split();
+
                     for _ in 0..num_chunks {
                         let data = Bytes::from(vec![0u8; chunk_size]);
-                        stream.writer().write_all(&data).await.unwrap();
+                        writer.write_all(&data).await.unwrap();
 
                         let mut response = vec![0; chunk_size];
-                        stream.reader().read_exact(&mut response).await.unwrap();
+                        reader.read_exact(&mut response).await.unwrap();
                     }
 
                     server_handle.await.unwrap();

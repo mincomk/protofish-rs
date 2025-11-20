@@ -12,13 +12,9 @@ use crate::{
     utp::UTPStream,
 };
 
-pub struct PMC<S>
-where
-    S: UTPStream,
-{
+pub struct PMC<U: UTPStream> {
     counter: Mutex<ContextCounter>,
-    frame: PMCFrame,
-    utp_stream: Arc<S>,
+    frame: Arc<PMCFrame<U>>,
 }
 
 impl<S> PMC<S>
@@ -26,12 +22,9 @@ where
     S: UTPStream,
 {
     pub(crate) fn new(is_server: bool, utp_stream: S) -> Self {
-        let utp_stream = Arc::new(utp_stream);
-
         Self {
             counter: ContextCounter::new(is_server).into(),
-            frame: PMCFrame::new(utp_stream.clone()),
-            utp_stream,
+            frame: PMCFrame::new(utp_stream).into(),
         }
     }
 
@@ -43,7 +36,7 @@ where
     fn make_context(&self, context_id: u64, initial_payload: Option<Payload>) -> Context<S> {
         let writer = ContextWriter {
             context_id,
-            utp_stream: self.utp_stream.clone(),
+            pmc_frame: self.frame.clone(),
         };
 
         let receiver = self.frame.subscribe_context(context_id, initial_payload);

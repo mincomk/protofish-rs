@@ -22,13 +22,14 @@ async fn client_run<U: UTP>(utp: U) {
 
     let arb = conn.new_arb();
     let stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
+    let (mut writer, mut reader) = stream.split();
 
-    stream.writer().write_all(b"muffinmuffin").await.unwrap();
+    writer.write_all(b"muffinmuffin").await.unwrap();
 
     tokio::task::yield_now().await;
 
     let mut got = vec![0u8; 8];
-    stream.reader().read_exact(&mut got).await.unwrap();
+    reader.read_exact(&mut got).await.unwrap();
     assert_eq!(got, b"muffinis");
 }
 
@@ -37,10 +38,11 @@ async fn server_run<U: UTP>(utp: U) {
 
     let arb = conn.next_arb().await.unwrap();
     let stream = arb.wait_stream().await.unwrap();
+    let (mut writer, mut reader) = stream.split();
 
     let mut got = vec![0u8; 12];
-    stream.reader().read_exact(&mut got).await.unwrap();
+    reader.read_exact(&mut got).await.unwrap();
     assert_eq!(got, b"muffinmuffin");
 
-    stream.writer().write_all(b"muffinis").await.unwrap();
+    writer.write_all(b"muffinis").await.unwrap();
 }

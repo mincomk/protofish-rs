@@ -4,7 +4,7 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::{
     core::common::error::ConnectionError,
-    internal::pmc_frame::send_frame,
+    internal::pmc_frame::PMCFrame,
     schema::{ContextId, Message, Payload},
     utp::UTPStream,
 };
@@ -16,7 +16,7 @@ use crate::{
 /// each context.
 pub struct ContextWriter<S: UTPStream> {
     pub(crate) context_id: ContextId,
-    pub(crate) utp_stream: Arc<S>,
+    pub(crate) pmc_frame: Arc<PMCFrame<S>>,
 }
 
 impl<S: UTPStream> ContextWriter<S> {
@@ -29,15 +29,13 @@ impl<S: UTPStream> ContextWriter<S> {
     ///
     /// Returns an error if the underlying stream write fails.
     pub async fn write(&self, payload: Payload) -> Result<(), ConnectionError> {
-        send_frame(
-            self.utp_stream.as_ref(),
-            Message {
+        self.pmc_frame
+            .send_frame(Message {
                 context_id: self.context_id,
                 payload,
-            },
-        )
-        .await
-        .map_err(ConnectionError::UTP)
+            })
+            .await
+            .map_err(ConnectionError::UTP)
     }
 }
 
