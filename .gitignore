@@ -49,3 +49,4 @@ rust-project.json
 
 build
 .VSCodeCounter
+cert.pem
