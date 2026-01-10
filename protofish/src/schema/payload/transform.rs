@@ -96,6 +96,7 @@ impl From<payload_v1::ClientHello> for payload_schema::ClientHello {
         payload_schema::ClientHello {
             version: value.version.unwrap().into(),
             resume_connection_token: value.resume_connection_token,
+            hostname: value.hostname,
         }
     }
 }
@@ -105,6 +106,7 @@ impl From<payload_schema::ClientHello> for payload_v1::ClientHello {
         payload_v1::ClientHello {
             version: Some(value.version.into()),
             resume_connection_token: value.resume_connection_token,
+            hostname: value.hostname,
         }
     }
 }
@@ -282,6 +284,7 @@ mod tests {
                 minor: 0,
                 patch: 0,
             }),
+            hostname: "example.com".into(),
             resume_connection_token: None,
         };
         let payload = payload_v1::Payload {
@@ -311,6 +314,7 @@ mod tests {
                 minor: 0,
                 patch: 0,
             }),
+            hostname: "example.com".into(),
             resume_connection_token: Some(vec![1, 2, 3]),
         };
         let schema_client_hello: payload_schema::ClientHello = proto_client_hello.clone().into();

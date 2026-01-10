@@ -65,7 +65,7 @@ async fn setup_connection() -> (quicfish::ArbContext, quicfish::ArbContext) {
         .expect("Failed to connect");
     let client_utp = Arc::new(QuicUTP::new(client_conn, false));
 
-    let conn_client = protofish::connect(client_utp).await.unwrap();
+    let conn_client = protofish::connect(client_utp, "example.com").await.unwrap();
     let arb_client = conn_client.new_arb();
     arb_client
         .new_stream(IntegrityType::Reliable)

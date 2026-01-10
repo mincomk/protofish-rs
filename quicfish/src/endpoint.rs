@@ -11,14 +11,19 @@ pub struct QuicEndpoint {
 impl QuicEndpoint {
     pub fn client(bind_addr: SocketAddr, config: QuicConfig) -> Result<Self> {
         let client_config = config.into_quinn_client_config()?;
-        let mut endpoint = quinn::Endpoint::client(bind_addr)
-            .map_err(|e| Error::Config(e.to_string()))?;
+        let mut endpoint =
+            quinn::Endpoint::client(bind_addr).map_err(|e| Error::Config(e.to_string()))?;
         endpoint.set_default_client_config(client_config);
 
         Ok(Self {
             endpoint,
             is_server: false,
         })
+    }
+
+    /// Creates a client endpoint with a default configuration that trusts any server certificate.
+    pub fn client_insecure(bind_addr: SocketAddr) -> Result<Self> {
+        Self::client(bind_addr, QuicConfig::client_default())
     }
 
     pub fn server(bind_addr: SocketAddr, config: QuicConfig) -> Result<Self> {
@@ -32,9 +37,20 @@ impl QuicEndpoint {
         })
     }
 
-    pub async fn connect(&self, server_addr: SocketAddr, server_name: &str) -> Result<quinn::Connection> {
+    /// Creates a server endpoint with a self-signed certificate.
+    pub fn server_insecure(bind_addr: SocketAddr) -> Result<Self> {
+        Self::server(bind_addr, QuicConfig::server_insecure())
+    }
+
+    pub async fn connect(
+        &self,
+        server_addr: SocketAddr,
+        server_name: &str,
+    ) -> Result<quinn::Connection> {
         if self.is_server {
-            return Err(Error::Config("Cannot connect from server endpoint".to_string()));
+            return Err(Error::Config(
+                "Cannot connect from server endpoint".to_string(),
+            ));
         }
 
         let connection = self

@@ -97,7 +97,10 @@ mod tests {
             stream_integrity: common::v1::IntegrityType::Reliable.into(),
         };
         let schema_meta: StreamCreateMeta = proto_meta.clone().into();
-        assert!(matches!(schema_meta.integrity_type, IntegrityType::Reliable));
+        assert!(matches!(
+            schema_meta.integrity_type,
+            IntegrityType::Reliable
+        ));
 
         // The into() call for StreamCreateMeta is not implemented, so we skip that part of the test
     }
@@ -137,10 +140,7 @@ mod tests {
         assert!(matches!(schema_timeout, ErrorType::Timeout));
 
         let schema_unspecified_back: common::v1::ErrorType = ErrorType::Unspecified.into();
-        assert_eq!(
-            schema_unspecified_back,
-            common::v1::ErrorType::Unspecified
-        );
+        assert_eq!(schema_unspecified_back, common::v1::ErrorType::Unspecified);
 
         let schema_timeout_back: common::v1::ErrorType = ErrorType::Timeout.into();
         assert_eq!(schema_timeout_back, common::v1::ErrorType::Timeout);

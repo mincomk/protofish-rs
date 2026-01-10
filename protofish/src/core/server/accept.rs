@@ -73,6 +73,7 @@ mod tests {
             let client_hello = ClientHello {
                 version: VERSION,
                 resume_connection_token,
+                hostname: "example.com".to_string(),
             };
 
             tx.write(Payload::ClientHello(client_hello)).await.unwrap();

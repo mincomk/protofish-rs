@@ -30,6 +30,7 @@ mod tests {
             payload: Payload::ClientHello(ClientHello {
                 version: VERSION,
                 resume_connection_token: None,
+                hostname: "example.com".into(),
             }),
         };
 

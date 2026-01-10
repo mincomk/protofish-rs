@@ -27,27 +27,27 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed design documentation.
 ### Basic Client
 
 ```rust
-use quicfish::{QuicConfig, QuicEndpoint, QuicUTP};
-use protofish::connect;
-use std::sync::Arc;
+use quicfish::{connect, QuicConfig};
+use protofish::IntegrityType;
+use std::io::BufReader;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Create client endpoint
-    let config = QuicConfig::client_default();
-    let endpoint = QuicEndpoint::client("0.0.0.0:0".parse()?, config)?;
+    // Connect to server (requires server certificate for verification)
+    let cert_file = std::fs::File::open("cert.pem")?;
+    let mut cert_reader = BufReader::new(cert_file);
+
+    let pf_conn = connect(
+        "127.0.0.1:4433".parse()?, 
+        "localhost", 
+        &mut cert_reader
+    ).await?;
     
-    // Connect to server
-    let connection = endpoint.connect("127.0.0.1:4433".parse()?, "localhost").await?;
+    // Create a new stream context
+    let arb = pf_conn.new_arb();
     
-    // Create UTP instance
-    let utp = Arc::new(QuicUTP::new(connection));
-    
-    // Use with Protofish
-    let protofish_conn = connect(utp).await?;
-    
-    // Now use protofish connection...
-    let (writer, reader) = protofish_conn.new_arb();
+    // Open a reliable stream
+    let mut stream = arb.new_stream(IntegrityType::Reliable).await?;
     
     Ok(())
 }
@@ -56,40 +56,26 @@ async fn main() -> anyhow::Result<()> {
 ### Basic Server
 
 ```rust
-use quicfish::{QuicConfig, QuicEndpoint, QuicUTP};
-use protofish::accept;
-use std::sync::Arc;
+use quicfish::create_server_endpoint;
+use std::io::BufReader;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Create server endpoint with TLS config
-    let config = QuicConfig::server_default()
-        .with_server_crypto(/* your rustls::ServerConfig */);
-    
-    let endpoint = QuicEndpoint::server("0.0.0.0:4433".parse()?, config)?;
-    
-    println!("Server listening on {}", endpoint.local_addr()?);
+    // Create server endpoint with certificate and private key
+    let cert_file = std::fs::File::open("cert.pem")?;
+    let key_file = std::fs::File::open("key.pem")?;
+    let mut cert_reader = BufReader::new(cert_file);
+    let mut key_reader = BufReader::new(key_file);
+
+    let endpoint = create_server_endpoint(
+        "0.0.0.0:4433".parse()?, 
+        &mut cert_reader, 
+        &mut key_reader
+    ).await?;
     
     // Accept connections
-    while let Some(connection) = endpoint.accept().await {
-        tokio::spawn(async move {
-            let utp = Arc::new(QuicUTP::new(connection));
-            
-            match accept(utp).await {
-                Ok(protofish_conn) => {
-                    // Handle protofish connection
-                    loop {
-                        match protofish_conn.next_arb().await {
-                            Ok(ctx) => {
-                                // Handle context
-                            }
-                            Err(e) => break,
-                        }
-                    }
-                }
-                Err(e) => eprintln!("Accept error: {}", e),
-            }
-        });
+    while let Some(conn) = endpoint.accept().await {
+        // Upgrade connection...
     }
     
     Ok(())
@@ -107,6 +93,36 @@ let config = QuicConfig::client_default()
     .with_keep_alive_interval(Duration::from_secs(15))
     .with_max_datagram_size(1400);
 ```
+
+## Examples
+
+The repository includes examples for an echo server and client.
+
+### Echo Server
+
+To run the echo server:
+
+```bash
+cargo run --example echo_server
+```
+
+This will:
+1. Generate a self-signed certificate (`cert.pem`)
+2. Start a server on `127.0.0.1:4433`
+3. Echo back any data received on streams
+
+### Echo Client
+
+To run the echo client (after starting the server):
+
+```bash
+cargo run --example echo_client
+```
+
+This will:
+1. Connect to the server using the generated `cert.pem`
+2. Send "Hello from client!"
+3. Print the server's response
 
 ## Features
 

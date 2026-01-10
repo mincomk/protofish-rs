@@ -31,6 +31,9 @@ pub enum Error {
 
     #[error("Stream closed")]
     StreamClosed,
+
+    #[error("Protofish error: {0}")]
+    Protofish(#[from] protofish::ProtofishError),
 }
 
 impl From<Error> for protofish::utp::error::UTPError {

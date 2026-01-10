@@ -64,7 +64,7 @@ impl MockUTP {
 impl UTP for MockUTP {
     type Stream = MockUTPStream;
 
-    async fn connect(&self) -> Result<(), UTPError> {
+    async fn connect(&self, _hostname: &str) -> Result<(), UTPError> {
         Ok(())
     }
 

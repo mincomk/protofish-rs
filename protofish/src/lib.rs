@@ -20,7 +20,7 @@
 //!
 //! // Client side
 //! async fn client_example<U: UTP>(utp: Arc<U>) {
-//!     let conn = connect(utp).await.unwrap();
+//!     let conn = connect(utp, "example.com").await.unwrap();
 //!     let arb = conn.new_arb();
 //!
 //!     let mut stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
@@ -61,7 +61,8 @@ mod prost_generated {
 
 mod constant;
 mod core;
-mod error;
+pub mod error;
+pub use error::ProtofishError;
 mod internal;
 pub mod schema;
 pub use schema::*;

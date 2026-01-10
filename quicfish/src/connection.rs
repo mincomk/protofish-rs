@@ -91,7 +91,7 @@ impl QuicUTP {
 impl UTP for QuicUTP {
     type Stream = QuicUTPStream;
 
-    async fn connect(&self) -> Result<(), UTPError> {
+    async fn connect(&self, _hostname: &str) -> Result<(), UTPError> {
         Ok(())
     }
 

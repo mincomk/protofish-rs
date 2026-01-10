@@ -30,6 +30,7 @@ pub enum Payload {
 pub struct ClientHello {
     pub version: Version,
     pub resume_connection_token: Option<Vec<u8>>,
+    pub hostname: String,
 }
 
 #[derive(Debug, Clone)]

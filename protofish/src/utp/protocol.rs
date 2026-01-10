@@ -42,10 +42,14 @@ pub trait UTP: Send + Sync + 'static {
 
     /// Establishes the underlying transport connection.
     ///
+    /// # Arguments
+    ///
+    /// * `hostname` - The hostname of the remote peer (e.g., for SNI or verification)
+    ///
     /// # Errors
     ///
     /// Returns an error if the connection fails.
-    async fn connect(&self) -> Result<(), UTPError>;
+    async fn connect(&self, hostname: &str) -> Result<(), UTPError>;
 
     /// Waits for the next UTP event.
     ///

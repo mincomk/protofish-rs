@@ -18,7 +18,7 @@ async fn test_protofish() {
 }
 
 async fn client_run<U: UTP>(utp: U) {
-    let conn = connect(utp.into()).await.unwrap();
+    let conn = connect(utp.into(), "example.com").await.unwrap();
 
     let arb = conn.new_arb();
     let stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();

@@ -105,7 +105,14 @@ impl DatagramRouter {
         tokio::spawn(async move {
             loop {
                 if let Err(e) = self_c.run_listener().await {
-                    tracing::warn!("datagram listener error: {:?}", e);
+                    if matches!(
+                        e,
+                        crate::error::Error::Connection(quinn::ConnectionError::ApplicationClosed(
+                            ..
+                        ))
+                    ) {
+                        break;
+                    }
                 }
             }
         });

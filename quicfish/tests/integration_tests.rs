@@ -94,7 +94,7 @@ async fn test_reliable_stream() {
         .await
         .unwrap();
     let client_utp = Arc::new(QuicUTP::new(conn, false));
-    let client_conn = protofish::connect(client_utp).await.unwrap();
+    let client_conn = protofish::connect(client_utp, "example.com").await.unwrap();
     let arb = client_conn.new_arb();
     let stream = arb.new_stream(IntegrityType::Reliable).await.unwrap();
     let (mut writer, mut reader) = stream.split();
@@ -167,7 +167,7 @@ async fn test_unreliable_stream() {
         .await
         .unwrap();
     let client_utp = Arc::new(QuicUTP::new(conn, false));
-    let client_conn = protofish::connect(client_utp).await.unwrap();
+    let client_conn = protofish::connect(client_utp, "example.com").await.unwrap();
     let arb = client_conn.new_arb();
 
     let stream = arb.new_stream(IntegrityType::Unreliable).await.unwrap();
@@ -239,7 +239,7 @@ async fn test_multiple_streams() {
     let mut handles = vec![];
 
     let utp = Arc::clone(&client_utp);
-    let conn = protofish::connect(utp).await.unwrap();
+    let conn = protofish::connect(utp, "example.com").await.unwrap();
 
     for _ in 0..3 {
         let arb = conn.new_arb();

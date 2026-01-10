@@ -38,16 +38,16 @@ use crate::{
 /// - The UTP connection fails
 /// - Opening the stream fails
 /// - The server rejects the handshake
-pub async fn connect<U>(utp: Arc<U>) -> Result<Connection<U>, ProtofishError>
+pub async fn connect<U>(utp: Arc<U>, hostname: &str) -> Result<Connection<U>, ProtofishError>
 where
     U: UTP,
 {
-    utp.connect().await?;
+    utp.connect(hostname).await?;
 
     let stream = utp.new_stream(IntegrityType::Reliable).await?;
     let pmc = PMC::new(false, stream);
 
-    let _ = client_handshake(pmc.create_context(), None).await?;
+    let _ = client_handshake(pmc.create_context(), None, hostname.to_string()).await?;
 
     Ok(Connection::new(utp.clone(), pmc))
 }
@@ -55,12 +55,14 @@ where
 async fn client_handshake<S: UTPStream>(
     ctx: (ContextWriter<S>, ContextReader),
     resume_token: Option<Bytes>,
+    hostname: String,
 ) -> Result<Bytes, ProtofishError> {
     let (tx, rx) = ctx;
 
     let client_hello = ClientHello {
         version: VERSION,
         resume_connection_token: resume_token.map(Into::into),
+        hostname,
     };
 
     tx.write(Payload::ClientHello(client_hello)).await?;
@@ -126,8 +128,12 @@ mod tests {
         });
 
         let ctx = client_pmc.create_context();
-        client_handshake(ctx, Some(BytesMut::zeroed(30).freeze()))
-            .await
-            .unwrap();
+        client_handshake(
+            ctx,
+            Some(BytesMut::zeroed(30).freeze()),
+            "example.com".into(),
+        )
+        .await
+        .unwrap();
     }
 }

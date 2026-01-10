@@ -12,12 +12,8 @@ pub struct QuicConfig {
 }
 
 pub enum CryptoConfig {
-    Client {
-        crypto: rustls::ClientConfig,
-    },
-    Server {
-        crypto: rustls::ServerConfig,
-    },
+    Client { crypto: rustls::ClientConfig },
+    Server { crypto: rustls::ServerConfig },
 }
 
 impl QuicConfig {
@@ -35,6 +31,28 @@ impl QuicConfig {
             max_concurrent_uni_streams: 100u64.into(),
             max_datagram_size: 1200,
             crypto: CryptoConfig::Client { crypto },
+        }
+    }
+
+    pub fn server_insecure() -> Self {
+        let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let key =
+            rustls::pki_types::PrivateKeyDer::try_from(cert.key_pair.serialize_der()).unwrap();
+        let cert_der = rustls::pki_types::CertificateDer::from(cert.cert.der().clone());
+
+        let crypto = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert_der], key)
+            .unwrap();
+
+        Self {
+            server_name: None,
+            max_idle_timeout: Duration::from_secs(30),
+            keep_alive_interval: Duration::from_secs(10),
+            max_concurrent_bidi_streams: 100u64.into(),
+            max_concurrent_uni_streams: 100u64.into(),
+            max_datagram_size: 1200,
+            crypto: CryptoConfig::Server { crypto },
         }
     }
 
@@ -85,20 +103,26 @@ impl QuicConfig {
     }
 
     pub(crate) fn into_quinn_client_config(self) -> crate::error::Result<quinn::ClientConfig> {
-        let crypto = match self.crypto {
+        let mut crypto = match self.crypto {
             CryptoConfig::Client { crypto } => crypto,
             CryptoConfig::Server { .. } => {
                 return Err(crate::error::Error::Config(
                     "Server crypto config provided for client".to_string(),
-                ))
+                ));
             }
         };
+
+        crypto.alpn_protocols = vec![b"protofish".to_vec()];
 
         let mut transport = quinn::TransportConfig::default();
         transport.max_idle_timeout(Some(self.max_idle_timeout.try_into().unwrap()));
         transport.keep_alive_interval(Some(self.keep_alive_interval));
-        transport.max_concurrent_bidi_streams(quinn::VarInt::from_u64(self.max_concurrent_bidi_streams).unwrap());
-        transport.max_concurrent_uni_streams(quinn::VarInt::from_u64(self.max_concurrent_uni_streams).unwrap());
+        transport.max_concurrent_bidi_streams(
+            quinn::VarInt::from_u64(self.max_concurrent_bidi_streams).unwrap(),
+        );
+        transport.max_concurrent_uni_streams(
+            quinn::VarInt::from_u64(self.max_concurrent_uni_streams).unwrap(),
+        );
         transport.datagram_receive_buffer_size(Some(self.max_datagram_size * 100));
         transport.datagram_send_buffer_size(self.max_datagram_size * 100);
 
@@ -112,20 +136,26 @@ impl QuicConfig {
     }
 
     pub(crate) fn into_quinn_server_config(self) -> crate::error::Result<quinn::ServerConfig> {
-        let crypto = match self.crypto {
+        let mut crypto = match self.crypto {
             CryptoConfig::Server { crypto } => crypto,
             CryptoConfig::Client { .. } => {
                 return Err(crate::error::Error::Config(
                     "Client crypto config provided for server".to_string(),
-                ))
+                ));
             }
         };
+
+        crypto.alpn_protocols = vec![b"protofish".to_vec()];
 
         let mut transport = quinn::TransportConfig::default();
         transport.max_idle_timeout(Some(self.max_idle_timeout.try_into().unwrap()));
         transport.keep_alive_interval(Some(self.keep_alive_interval));
-        transport.max_concurrent_bidi_streams(quinn::VarInt::from_u64(self.max_concurrent_bidi_streams).unwrap());
-        transport.max_concurrent_uni_streams(quinn::VarInt::from_u64(self.max_concurrent_uni_streams).unwrap());
+        transport.max_concurrent_bidi_streams(
+            quinn::VarInt::from_u64(self.max_concurrent_bidi_streams).unwrap(),
+        );
+        transport.max_concurrent_uni_streams(
+            quinn::VarInt::from_u64(self.max_concurrent_uni_streams).unwrap(),
+        );
         transport.datagram_receive_buffer_size(Some(self.max_datagram_size * 100));
         transport.datagram_send_buffer_size(self.max_datagram_size * 100);
 
@@ -134,7 +164,6 @@ impl QuicConfig {
                 .map_err(|e| crate::error::Error::Tls(e.to_string()))?,
         ));
         config.transport_config(Arc::new(transport));
-
         Ok(config)
     }
 }

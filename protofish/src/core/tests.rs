@@ -11,5 +11,5 @@ async fn test_bi_handshake() {
         accept(b.into()).await.unwrap();
     });
 
-    connect(a.into()).await.unwrap();
+    connect(a.into(), "".into()).await.unwrap();
 }
